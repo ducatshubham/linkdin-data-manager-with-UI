@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LinkedIn Data Manager</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    /* minimal overrides to ensure compact layout */
+    .badge-skill { background:#eef2ff; color:#1e40af; margin-right:6px; }
+    .table thead th { position: sticky; top: 0; background: #fff; z-index: 2; }
+  </style>
+  <link rel="icon" href="/static/favicon.ico">
+  <meta name="theme-color" content="#0d6efd">
+</head>
+<body class="bg-light">
+  <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <div class="container-fluid">
+      <a class="navbar-brand d-flex align-items-center" href="#">
+        <img src="/static/brand.svg" alt="Brand" height="24" class="me-2">
+        LinkedIn Data Manager
+      </a>
+      <div class="d-flex gap-2">
+        <button id="btnViewTable" class="btn btn-light btn-sm">Table</button>
+        <button id="btnViewCategories" class="btn btn-outline-light btn-sm">Categories</button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container py-4">
+    <div class="card shadow-sm mb-3">
+      <div class="card-body">
+        <form id="filters" class="row g-3 align-items-end">
+          <div class="col-12">
+            <label class="form-label">Global Search</label>
+            <input type="text" class="form-control" id="filterGlobal" placeholder="Search name, role, company, location, skills, category">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Title</label>
+            <input type="text" class="form-control" id="filterRole" placeholder="e.g., Engineering Manager">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Location</label>
+            <input type="text" class="form-control" id="filterLocation" placeholder="e.g., Bangalore">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Skill</label>
+            <input type="text" class="form-control" id="filterSkill" placeholder="e.g., Python">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Category</label>
+            <input type="text" class="form-control" id="filterCategory" placeholder="e.g., Senior Software Engineer">
+          </div>
+          <div class="col-md-12 d-flex align-items-end gap-2">
+            <button id="btnSearch" type="submit" class="btn btn-primary"><i class="fa fa-search"></i> Search</button>
+            <button id="btnReset" type="button" class="btn btn-secondary">Reset</button>
+            <div class="ms-auto d-flex align-items-center gap-2">
+              <input class="form-control" type="file" id="uploadFile" accept=".csv,.xlsx,.xls">
+              <input class="form-control" type="text" id="uploadCategory" placeholder="Optional category">
+              <button id="btnUpload" type="button" class="btn btn-success"><i class="fa fa-upload"></i> Upload</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="viewTable" class="card shadow-sm">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div><span id="resultCount">0</span> results • <span id="pageInfo">Page 1/1</span></div>
+          <div class="btn-group" role="group">
+            <button class="btn btn-outline-primary" id="prevPage">Prev</button>
+            <button class="btn btn-outline-primary" id="nextPage">Next</button>
+          </div>
+        </div>
+        <div class="table-responsive" style="max-height: 65vh; overflow: auto;">
+          <table class="table table-hover align-middle" id="resultsTable">
+            <thead>
+              <tr>
+                <th style="width: 90px">Profile</th>
+                <th>Name</th>
+                <th>Title</th>
+                <th>Education</th>
+                <th>Location</th>
+                <th>Category</th>
+                <th style="width: 40%">Skills</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="viewCategories" class="card shadow-sm" style="display:none;">
+      <div class="card-body">
+        <div class="row" id="categoriesGrid"></div>
+      </div>
+    </div>
+  </main>
+
+  <div id="loading" class="loading-overlay">
+    <div class="spinner-border text-primary" role="status">
+      <span class="visually-hidden">Loading...</span>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+
+

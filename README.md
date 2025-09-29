@@ -41,7 +41,8 @@ linkedin_data_manager/
    ```
    uvicorn main:app --reload --host 0.0.0.0 --port 8000
    ```
-   - Access the API at `http://localhost:8000`
+   - UI: `http://localhost:8000/` (filters, pagination, upload, categories)
+   - API: `http://localhost:8000/api/...`
    - Interactive docs: `http://localhost:8000/docs`
 
 5. **Initialize Database**
@@ -126,6 +127,13 @@ Each profile is a document:
 ### Indexes
 - Unique on `profile_url`
 - On `current_role`, `skills`, `location` for efficient queries.
+
+## Web UI Usage
+
+1. Open `http://localhost:8000/`.
+2. Use filters (Role, Location, Skill, Category) and pagination to browse profiles.
+3. Upload CSV/Excel from the top-right uploader. Optionally provide a Category.
+4. Switch to Categories view from the navbar to see grouped counts and quickly filter by a category.
 
 ## Example Usage
 

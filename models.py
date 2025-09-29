@@ -24,6 +24,7 @@ class Profile(BaseModel):
     skills: List[str] = []
     experience: List[Experience] = []
     education: List[Education] = []
+    total_experience: Optional[str] = None
     profile_url: str
     category: Optional[str] = None
     last_scraped_at: datetime = Field(default_factory=datetime.utcnow)

@@ -17,10 +17,10 @@ def normalize_company_name(company: str) -> str:
     return company.title()
 
 def parse_skills(skills_str: str) -> List[str]:
-    """Convert skills string to list, split by comma or semicolon."""
+    """Convert skills string to list. Supports comma, semicolon, and pipe separators."""
     if not skills_str:
         return []
-    skills = re.split(r'[;,]', skills_str)
+    skills = re.split(r'[;|,]', skills_str)
     return [clean_string(skill) for skill in skills if skill.strip()]
 
 def standardize_date(date_str: str) -> str:
@@ -56,8 +56,22 @@ def clean_profile_data(raw_data: Dict[str, Any]) -> Dict[str, Any]:
     cleaned['current_company'] = normalize_company_name(clean_string(raw_data.get('current_company', '')))
     cleaned['location'] = clean_string(raw_data.get('location', ''))
     cleaned['skills'] = parse_skills(clean_string(raw_data.get('skills', '')))
-    cleaned['experience'] = []  # Assuming experience is parsed separately
-    cleaned['education'] = []  # Assuming education is parsed separately
+    # Education: keep as simple list/str for now
+    education = raw_data.get('education')
+    if isinstance(education, list):
+        cleaned['education'] = [{'degree': '', 'institute': clean_string(e)} for e in education if clean_string(e)]
+    else:
+        edu_str = clean_string(education)
+        cleaned['education'] = ([{'degree': '', 'institute': e.strip()} for e in edu_str.split('|') if e.strip()] if edu_str else [])
+
+    # Experience: store as raw string for now; advanced parsing can be added later
+    exp = raw_data.get('experience')
+    if isinstance(exp, list):
+        cleaned['experience'] = [{'company': '', 'role': clean_string(e)} for e in exp if clean_string(e)]
+    else:
+        exp_str = clean_string(exp)
+        cleaned['experience'] = ([{'company': '', 'role': e.strip()} for e in exp_str.split('|') if e.strip()] if exp_str else [])
+
     cleaned['profile_url'] = clean_string(raw_data.get('profile_url', ''))
     cleaned['raw_json'] = raw_data
     return cleaned

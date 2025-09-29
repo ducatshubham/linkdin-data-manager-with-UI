@@ -9,6 +9,24 @@ import tempfile
 
 router = APIRouter()
 
+def _sanitize_profile_document(doc: Dict[str, Any]) -> Profile:
+    """Coerce Mongo document into a valid Profile model, filling safe defaults."""
+    safe: Dict[str, Any] = {
+        "_id": doc.get("_id"),
+        "profile_id": doc.get("profile_id", ""),
+        "name": doc.get("name", ""),
+        "current_role": doc.get("current_role", ""),
+        "current_company": doc.get("current_company", ""),
+        "location": doc.get("location", ""),
+        "skills": doc.get("skills", []) or [],
+        "experience": doc.get("experience", []) or [],
+        "education": doc.get("education", []) or [],
+        "profile_url": doc.get("profile_url", ""),
+        "category": doc.get("category"),
+        "raw_json": doc.get("raw_json", {}),
+    }
+    return Profile(**safe)
+
 @router.post("/profiles/import", response_model=dict)
 async def import_profiles(file: UploadFile = File(...), category: Optional[str] = Query(None)):
     """Import profiles from uploaded CSV/Excel file."""
@@ -34,11 +52,15 @@ async def get_profiles(skip: int = 0, limit: int = 10):
     """Get all profiles with pagination."""
     collection = await get_collection()
     profiles = []
-    async for profile in collection.find().skip(skip).limit(limit):
-        profiles.append(Profile(**profile))
+    async for profile in collection.find().sort("last_scraped_at", -1).skip(skip).limit(limit):
+        try:
+            profiles.append(_sanitize_profile_document(profile))
+        except Exception:
+            # Skip malformed documents instead of failing the whole request
+            continue
     return profiles
 
-@router.get("/profiles/{profile_id}", response_model=Profile)
+@router.get("/profiles/by-id/{profile_id}", response_model=Profile)
 async def get_profile(profile_id: str):
     """Get a single profile by ID."""
     collection = await get_collection()
@@ -53,25 +75,88 @@ async def search_profiles(
     location: Optional[str] = Query(None),
     skill: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
+    q: Optional[str] = Query(None, description="Global search across name/role/company/location/skills"),
     skip: int = 0,
     limit: int = 10
 ):
     """Search profiles by filters."""
     collection = await get_collection()
-    query = {}
+    criteria = []
     if role:
-        query["current_role"] = {"$regex": role, "$options": "i"}
+        criteria.append({"current_role": {"$regex": role, "$options": "i"}})
     if location:
-        query["location"] = {"$regex": location, "$options": "i"}
+        criteria.append({"location": {"$regex": location, "$options": "i"}})
     if skill:
-        query["skills"] = {"$in": [skill]}
+        # For arrays of strings, regex directly on field works across elements
+        criteria.append({"skills": {"$regex": skill, "$options": "i"}})
     if category:
-        query["category"] = category
+        criteria.append({"category": category})
+    if q:
+        or_block = {
+            "$or": [
+                {"name": {"$regex": q, "$options": "i"}},
+                {"current_role": {"$regex": q, "$options": "i"}},
+                {"current_company": {"$regex": q, "$options": "i"}},
+                {"location": {"$regex": q, "$options": "i"}},
+                {"skills": {"$regex": q, "$options": "i"}},
+                {"category": {"$regex": q, "$options": "i"}},
+            ]
+        }
+        criteria.append(or_block)
+
+    query = {"$and": criteria} if criteria else {}
 
     profiles = []
-    async for profile in collection.find(query).skip(skip).limit(limit):
-        profiles.append(Profile(**profile))
+    async for profile in collection.find(query).sort("last_scraped_at", -1).skip(skip).limit(limit):
+        try:
+            profiles.append(_sanitize_profile_document(profile))
+        except Exception:
+            continue
     return profiles
+
+@router.get("/profiles/search-adv", response_model=Dict[str, Any])
+async def search_profiles_advanced(
+    role: Optional[str] = Query(None),
+    location: Optional[str] = Query(None),
+    skill: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
+    skip: int = 0,
+    limit: int = 10
+):
+    """Search returning items and total count for pagination UI."""
+    collection = await get_collection()
+    criteria = []
+    if role:
+        criteria.append({"current_role": {"$regex": role, "$options": "i"}})
+    if location:
+        criteria.append({"location": {"$regex": location, "$options": "i"}})
+    if skill:
+        criteria.append({"skills": {"$elemMatch": {"$regex": skill, "$options": "i"}}})
+    if category:
+        criteria.append({"category": category})
+    if q:
+        criteria.append({
+            "$or": [
+                {"name": {"$regex": q, "$options": "i"}},
+                {"current_role": {"$regex": q, "$options": "i"}},
+                {"current_company": {"$regex": q, "$options": "i"}},
+                {"location": {"$regex": q, "$options": "i"}},
+                {"skills": {"$regex": q, "$options": "i"}},
+                {"category": {"$regex": q, "$options": "i"}},
+                {"education": {"$elemMatch": {"institute": {"$regex": q, "$options": "i"}}}},
+            ]
+        })
+    query = {"$and": criteria} if criteria else {}
+
+    total = await collection.count_documents(query)
+    items: List[Profile] = []
+    async for doc in collection.find(query).sort("last_scraped_at", -1).skip(skip).limit(limit):
+        try:
+            items.append(_sanitize_profile_document(doc))
+        except Exception:
+            continue
+    return {"items": items, "total": total}
 
 @router.get("/profiles/by-category", response_model=Dict[str, Dict[str, Any]])
 async def get_profiles_by_category(limit: Optional[int] = Query(10, ge=1)):
@@ -100,7 +185,7 @@ async def get_profiles_by_category(limit: Optional[int] = Query(10, ge=1)):
         }
     return groups
 
-@router.put("/profiles/{profile_id}", response_model=Profile)
+@router.put("/profiles/by-id/{profile_id}", response_model=Profile)
 async def update_profile(profile_id: str, update: ProfileUpdate):
     """Update a profile."""
     collection = await get_collection()
@@ -113,7 +198,7 @@ async def update_profile(profile_id: str, update: ProfileUpdate):
     updated_profile = await collection.find_one({"_id": ObjectId(profile_id)})
     return Profile(**updated_profile)
 
-@router.delete("/profiles/{profile_id}")
+@router.delete("/profiles/by-id/{profile_id}")
 async def delete_profile(profile_id: str):
     """Delete a profile."""
     collection = await get_collection()
@@ -121,3 +206,22 @@ async def delete_profile(profile_id: str):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Profile not found")
     return {"message": "Profile deleted"}
+
+@router.post("/profiles/backfill-education")
+async def backfill_education():
+    """One-time helper: if education is empty but raw_json has 'Education', fill it."""
+    collection = await get_collection()
+    updated = 0
+    async for doc in collection.find({"$or": [{"education": {"$size": 0}}, {"education": {"$exists": False}}]}):
+        raw = doc.get("raw_json", {})
+        edu = raw.get("Education") or raw.get("education")
+        if not edu:
+            continue
+        if isinstance(edu, list):
+            edu_list = [{"degree": "", "institute": str(e).strip()} for e in edu if str(e).strip()]
+        else:
+            edu_list = [{"degree": "", "institute": s.strip()} for s in str(edu).split("|") if s.strip()]
+        if edu_list:
+            await collection.update_one({"_id": doc["_id"]}, {"$set": {"education": edu_list}})
+            updated += 1
+    return {"updated": updated}

@@ -77,8 +77,13 @@ async def import_folder(folder_path: str, category: str = None) -> Dict[str, Dic
 MAPPING_TEMPLATE = {
     "Name": "name",
     "Current Role": "current_role",
+    "Title": "current_role",
     "Current Company": "current_company",
+    # Company is optional in new sheet; omit mapping so it doesn't override with empty
     "Location": "location",
+    "Education": "education",
+    "Experience Details": "experience",
+    "Total Experience": "total_experience",
     "Skills": "skills",
     "Profile URL": "profile_url",
     # Add more mappings as needed
