@@ -187,3 +187,4 @@ Each profile is a document:
 - MongoDB connection issues: Check `.env` URI.
 - Import errors: Ensure pandas can read your files; check column mappings.
 - API errors: Use `/docs` for testing.
+# linkdin-data-manager-with-UI
