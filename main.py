@@ -30,12 +30,18 @@ if not os.path.exists(static_dir):
     os.makedirs(static_dir, exist_ok=True)
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
-@app.get("/")
+from fastapi.responses import HTMLResponse
+
+from fastapi.responses import Response
+
+@app.get("/", response_class=HTMLResponse)
 async def serve_index():
     index_path = os.path.join(static_dir, "index.html")
     if os.path.exists(index_path):
-        return FileResponse(index_path)
-    return {"message": "LinkedIn Data Manager API"}
+        with open(index_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        return HTMLResponse(content=content)
+    return Response(content="LinkedIn Data Manager API", media_type="text/plain")
 
 if __name__ == "__main__":
     import uvicorn

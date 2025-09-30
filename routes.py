@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query
+from fastapi.responses import StreamingResponse
 from typing import List, Optional, Dict, Any
 from bson import ObjectId
 from models import Profile, ProfileUpdate, ProfileSearch
@@ -6,6 +7,8 @@ from db import get_collection
 from etl import import_csv_file, import_folder
 import os
 import tempfile
+import csv
+import io
 
 router = APIRouter()
 
@@ -206,6 +209,84 @@ async def delete_profile(profile_id: str):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Profile not found")
     return {"message": "Profile deleted"}
+
+@router.get("/profiles/export-csv")
+async def export_profiles_csv(
+    role: Optional[str] = Query(None),
+    location: Optional[str] = Query(None),
+    skill: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
+):
+    """Export profiles to CSV based on filters."""
+    collection = await get_collection()
+    criteria = []
+    if role:
+        criteria.append({"current_role": {"$regex": role, "$options": "i"}})
+    if location:
+        criteria.append({"location": {"$regex": location, "$options": "i"}})
+    if skill:
+        criteria.append({"skills": {"$elemMatch": {"$regex": skill, "$options": "i"}}})
+    if category:
+        criteria.append({"category": category})
+    if q:
+        criteria.append({
+            "$or": [
+                {"name": {"$regex": q, "$options": "i"}},
+                {"current_role": {"$regex": q, "$options": "i"}},
+                {"current_company": {"$regex": q, "$options": "i"}},
+                {"location": {"$regex": q, "$options": "i"}},
+                {"skills": {"$regex": q, "$options": "i"}},
+                {"category": {"$regex": q, "$options": "i"}},
+                {"education": {"$elemMatch": {"institute": {"$regex": q, "$options": "i"}}}},
+            ]
+        })
+    query = {"$and": criteria} if criteria else {}
+
+    # Fetch all matching profiles
+    profiles = []
+    async for doc in collection.find(query).sort("last_scraped_at", -1):
+        try:
+            profiles.append(_sanitize_profile_document(doc))
+        except Exception:
+            continue
+
+    # Generate CSV
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    # Header
+    writer.writerow([
+        "Profile ID", "Name", "Current Role", "Current Company", "Location",
+        "Skills", "Experience", "Education", "Profile URL", "Category"
+    ])
+
+    # Rows
+    for p in profiles:
+        writer.writerow([
+            p.profile_id,
+            p.name,
+            p.current_role,
+            p.current_company,
+            p.location,
+            "; ".join(p.skills),
+            "; ".join([f"{e.role} at {e.company}" for e in p.experience]),
+            "; ".join([f"{e.degree} from {e.institute}" for e in p.education]),
+            p.profile_url,
+            p.category or "",
+        ])
+
+    output.seek(0)
+    response = StreamingResponse(io.StringIO(output.getvalue()), media_type="text/csv")
+    response.headers["Content-Disposition"] = "attachment; filename=profiles_export.csv"
+    return response
+
+@router.get("/profiles/stats", response_model=Dict[str, Any])
+async def get_profiles_stats():
+    """Get basic stats about profiles."""
+    collection = await get_collection()
+    total = await collection.count_documents({})
+    return {"total_profiles": total}
 
 @router.post("/profiles/backfill-education")
 async def backfill_education():

@@ -1,6 +1,27 @@
 (() => {
   const API_BASE = ""; // same host
 
+  // Theme management
+  const html = document.documentElement;
+  const themeToggle = document.getElementById('themeToggle');
+  const themeIcon = themeToggle.querySelector('i');
+
+  function setTheme(theme) {
+    html.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+    themeIcon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+  }
+
+  // Load saved theme or default to light
+  const savedTheme = localStorage.getItem('theme') || 'light';
+  setTheme(savedTheme);
+
+  themeToggle.addEventListener('click', () => {
+    const currentTheme = html.getAttribute('data-theme');
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+  });
+
   // Elements
   const filterRole = document.getElementById('filterRole');
   const filterLocation = document.getElementById('filterLocation');
@@ -23,11 +44,21 @@
   const btnViewCategories = document.getElementById('btnViewCategories');
   const categoriesGrid = document.getElementById('categoriesGrid');
   const loading = document.getElementById('loading');
+  const btnExport = document.getElementById('btnExport');
+  const sidebar = document.getElementById('sidebar');
+  const btnToggleFilters = document.getElementById('btnToggleFilters');
+  const btnCloseFilters = document.getElementById('btnCloseFilters');
+  const clock = document.getElementById('clock');
+  const quickTotalProfiles = document.getElementById('quickTotalProfiles');
+  const activeFilters = document.getElementById('activeFilters');
+  const lastUpdated = document.getElementById('lastUpdated');
 
   // State
   let skip = 0;
   let limit = 20;
   let lastBatchCount = 0;
+  let clockInterval = null;
+  let totalProfiles = 0;
 
   function buildQueryParams() {
     const params = new URLSearchParams();
@@ -148,6 +179,20 @@
     modal.show();
   }
 
+  async function fetchTotalProfiles() {
+    try {
+      const res = await fetch(`${API_BASE}/api/profiles/stats`);
+      if (!res.ok) throw new Error('Failed to fetch stats');
+      const data = await res.json();
+      totalProfiles = data.total_profiles || 0;
+      quickTotalProfiles.textContent = totalProfiles;
+    } catch (e) {
+      console.error('Failed to fetch total profiles:', e);
+      totalProfiles = 0;
+      quickTotalProfiles.textContent = '0';
+    }
+  }
+
   async function fetchProfiles() {
     const q = buildQueryParams();
     let items = [];
@@ -174,6 +219,11 @@
     renderRows(items);
     prevPageBtn.disabled = skip === 0;
     nextPageBtn.disabled = items.length < limit;
+
+    // Update quick stats
+    const activeCount = [filterGlobal.value, filterRole.value, filterLocation.value, filterSkill.value, filterCategory.value].filter(v => v.trim()).length;
+    activeFilters.textContent = activeCount;
+    lastUpdated.textContent = new Date().toLocaleString();
   }
 
   async function fetchCategories() {
@@ -253,9 +303,44 @@
     fetchProfiles().catch(console.error);
   });
 
+  // Sidebar toggle
+  btnToggleFilters.addEventListener('click', () => {
+    if (sidebar.style.transform === 'translateX(0px)') {
+      sidebar.style.transform = 'translateX(-100%)';
+    } else {
+      sidebar.style.transform = 'translateX(0)';
+    }
+  });
+
+  // Close filters button inside sidebar
+  btnCloseFilters.addEventListener('click', () => {
+    sidebar.style.transform = 'translateX(-100%)';
+  });
+
+  // Clock update
+  function updateClock() {
+    const now = new Date();
+    const timeString = now.toLocaleTimeString();
+    clock.textContent = timeString;
+  }
+  clockInterval = setInterval(updateClock, 1000);
+  updateClock();
+
   // Filters
   document.getElementById('filters').addEventListener('submit', onSearch);
   btnReset.addEventListener('click', onReset);
+
+  // Refresh button clears filters and reloads data
+  const btnRefresh = document.getElementById('btnRefresh');
+  btnRefresh.addEventListener('click', () => {
+    filterGlobal.value = '';
+    filterRole.value = '';
+    filterLocation.value = '';
+    filterSkill.value = '';
+    filterCategory.value = '';
+    skip = 0;
+    fetchProfiles().catch(console.error);
+  });
 
   // Instant search (debounced)
   function debounce(fn, ms) {
@@ -289,6 +374,7 @@
       if (!res.ok) throw new Error('Upload failed');
       await res.json();
       alert('Import completed');
+      fetchTotalProfiles().catch(console.error);
       onSearch();
     } catch (e) {
       alert(e.message || 'Upload error');
@@ -303,8 +389,33 @@
   btnViewTable.addEventListener('click', showTable);
   btnViewCategories.addEventListener('click', showCategories);
 
+  // Export CSV
+  btnExport.addEventListener('click', async () => {
+    const params = new URLSearchParams();
+    if (filterGlobal.value) params.append('q', filterGlobal.value);
+    if (filterRole.value) params.append('role', filterRole.value);
+    if (filterLocation.value) params.append('location', filterLocation.value);
+    if (filterSkill.value) params.append('skill', filterSkill.value);
+    if (filterCategory.value) params.append('category', filterCategory.value);
+    const url = `${API_BASE}/api/profiles/export-csv?${params.toString()}`;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Failed to export CSV');
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'profiles_export.csv';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (e) {
+      alert(e.message || 'Export error');
+    }
+  });
+
   // Initial load
   showTable();
+  fetchTotalProfiles().catch(console.error);
   fetchProfiles().catch(console.error);
 })();
 
