@@ -100,6 +100,10 @@
         <td>${locationCell}</td>
         <td>${categoryCell}</td>
         <td class="skill-wrap">${skillsCell}</td>
+        <td>
+          <button class="btn btn-sm btn-outline-warning btn-edit" data-id="${p._id}" title="Edit"><i class="fas fa-edit"></i></button>
+          <button class="btn btn-sm btn-outline-danger btn-delete ms-1" data-id="${p._id}" title="Delete"><i class="fas fa-trash-alt"></i></button>
+        </td>
       </tr>`;
     }).join('');
     // bind show all skills
@@ -232,7 +236,15 @@
     const data = await res.json();
     categoriesGrid.innerHTML = Object.entries(data).map(([cat, info]) => {
       const count = info.count || 0;
-      const sample = (info.profiles || []).slice(0,3).map(p => `<div class="small text-muted truncate">${escapeHtml(p.name || '')} — ${escapeHtml(p.current_company || '')}</div>`).join('');
+      const sample = (info.profiles || []).slice(0,3).map(p => `
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <div class="small text-muted truncate">${escapeHtml(p.name || '')} — ${escapeHtml(p.current_company || '')}</div>
+          <div class="d-flex gap-1">
+            <button class="btn btn-sm btn-outline-warning btn-edit-cat" data-id="${p._id}" title="Edit"><i class="fas fa-edit"></i></button>
+            <button class="btn btn-sm btn-outline-danger btn-delete-cat" data-id="${p._id}" title="Delete"><i class="fas fa-trash-alt"></i></button>
+          </div>
+        </div>
+      `).join('');
       return `<div class="col-md-4 col-lg-3 mb-3">
         <div class="category-card">
           <div class="d-flex justify-content-between align-items-start">
@@ -254,6 +266,37 @@
         showTable();
         onSearch();
       });
+    });
+
+    // Bind edit and delete for categories
+    categoriesGrid.addEventListener('click', async (event) => {
+      const editBtn = event.target.closest('.btn-edit-cat');
+      const deleteBtn = event.target.closest('.btn-delete-cat');
+
+      if (editBtn) {
+        const profileId = editBtn.getAttribute('data-id');
+        try {
+          const res = await fetch(`/api/profiles/by-id/${profileId}`);
+          if (!res.ok) throw new Error('Failed to fetch profile');
+          const profile = await res.json();
+          showEditModal(profile);
+        } catch (e) {
+          alert(e.message || 'Error fetching profile');
+        }
+      } else if (deleteBtn) {
+        const profileId = deleteBtn.getAttribute('data-id');
+        if (confirm('Are you sure you want to delete this profile?')) {
+          try {
+            const res = await fetch(`/api/profiles/by-id/${profileId}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error('Failed to delete profile');
+            alert('Profile deleted');
+            fetchTotalProfiles().catch(console.error);
+            fetchCategories().catch(console.error);
+          } catch (e) {
+            alert(e.message || 'Error deleting profile');
+          }
+        }
+      }
     });
   }
 
@@ -291,6 +334,7 @@
     fetchCategories().catch(console.error);
   }
 
+
   // Pagination
   prevPageBtn.addEventListener('click', () => {
     if (skip === 0) return;
@@ -302,6 +346,142 @@
     skip += limit;
     fetchProfiles().catch(console.error);
   });
+
+  // Delegate edit and delete button clicks
+  resultsTableBody.addEventListener('click', async (event) => {
+    const editBtn = event.target.closest('.btn-edit');
+    const deleteBtn = event.target.closest('.btn-delete');
+
+    if (editBtn) {
+      const profileId = editBtn.getAttribute('data-id');
+      console.log("Edit button clicked for profileId:", profileId);
+      // Fetch profile details and show edit modal
+      try {
+        const res = await fetch(`/api/profiles/by-id/${profileId}`);
+        console.log("Fetch URL:", `/api/profiles/by-id/${profileId}`, "Response status:", res.status);
+        if (!res.ok) {
+          if (res.status === 404) {
+            alert('Profile not found. It may have been deleted. Refreshing data...');
+            fetchProfiles().catch(console.error);
+            return;
+          }
+          throw new Error('Failed to fetch profile');
+        }
+        const profile = await res.json();
+        showEditModal(profile);
+      } catch (e) {
+        alert(e.message || 'Error fetching profile');
+      }
+    } else if (deleteBtn) {
+      const profileId = deleteBtn.getAttribute('data-id');
+      console.log("Delete button clicked for profileId:", profileId);
+      if (confirm('Are you sure you want to delete this profile?')) {
+        try {
+          const res = await fetch(`/api/profiles/by-id/${profileId}`, { method: 'DELETE' });
+          console.log("Delete fetch URL:", `/api/profiles/by-id/${profileId}`, "Response status:", res.status);
+          if (!res.ok) {
+            if (res.status === 404) {
+              alert('Profile not found. It may have already been deleted. Refreshing data...');
+              fetchProfiles().catch(console.error);
+              return;
+            }
+            throw new Error('Failed to delete profile');
+          }
+          alert('Profile deleted');
+          fetchTotalProfiles().catch(console.error);
+          fetchProfiles().catch(console.error);
+        } catch (e) {
+          alert(e.message || 'Error deleting profile');
+        }
+      }
+    }
+  });
+
+  // Show edit modal with profile data
+  function showEditModal(profile) {
+    const modalHtml = `
+      <div class="modal fade" id="editProfileModal" tabindex="-1" aria-labelledby="editProfileModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+          <form id="editProfileForm" class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="editProfileModalLabel">Edit Profile</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <div class="mb-3">
+                <label for="editName" class="form-label">Name</label>
+                <input type="text" class="form-control" id="editName" name="name" value="${escapeHtml(profile.name || '')}" required>
+              </div>
+              <div class="mb-3">
+                <label for="editRole" class="form-label">Current Role</label>
+                <input type="text" class="form-control" id="editRole" name="current_role" value="${escapeHtml(profile.current_role || '')}">
+              </div>
+              <div class="mb-3">
+                <label for="editCompany" class="form-label">Current Company</label>
+                <input type="text" class="form-control" id="editCompany" name="current_company" value="${escapeHtml(profile.current_company || '')}">
+              </div>
+              <div class="mb-3">
+                <label for="editLocation" class="form-label">Location</label>
+                <input type="text" class="form-control" id="editLocation" name="location" value="${escapeHtml(profile.location || '')}">
+              </div>
+              <div class="mb-3">
+                <label for="editSkills" class="form-label">Skills (comma separated)</label>
+                <input type="text" class="form-control" id="editSkills" name="skills" value="${escapeHtml((profile.skills || []).join(', '))}">
+              </div>
+              <div class="mb-3">
+                <label for="editCategory" class="form-label">Category</label>
+                <input type="text" class="form-control" id="editCategory" name="category" value="${escapeHtml(profile.category || '')}">
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="submit" class="btn btn-primary">Save changes</button>
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    `;
+    // Remove existing modal if any
+    const existingModal = document.getElementById('editProfileModal');
+    if (existingModal) existingModal.remove();
+    // Append modal to body
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = modalHtml;
+    document.body.appendChild(wrapper.firstElementChild);
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('editProfileModal'));
+    modal.show();
+
+    // Handle form submission
+    const form = document.getElementById('editProfileForm');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(form);
+      const updateData = {};
+      formData.forEach((value, key) => {
+        if (key === 'skills') {
+          updateData[key] = value.split(',').map(s => s.trim()).filter(Boolean);
+        } else {
+          updateData[key] = value.trim();
+        }
+      });
+      try {
+        const res = await fetch(`/api/profiles/by-id/${profile._id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updateData),
+        });
+        if (!res.ok) throw new Error('Failed to update profile');
+        alert('Profile updated successfully');
+        modal.hide();
+        fetchProfiles().catch(console.error);
+        fetchCategories().catch(console.error);
+        fetchTotalProfiles().catch(console.error);
+      } catch (err) {
+        alert(err.message || 'Error updating profile');
+      }
+    });
+  }
 
   // Sidebar toggle
   btnToggleFilters.addEventListener('click', () => {

@@ -15,7 +15,7 @@ router = APIRouter()
 def _sanitize_profile_document(doc: Dict[str, Any]) -> Profile:
     """Coerce Mongo document into a valid Profile model, filling safe defaults."""
     safe: Dict[str, Any] = {
-        "_id": doc.get("_id"),
+        "_id": str(doc.get("_id")) if doc.get("_id") else None,
         "profile_id": doc.get("profile_id", ""),
         "name": doc.get("name", ""),
         "current_role": doc.get("current_role", ""),
@@ -67,10 +67,11 @@ async def get_profiles(skip: int = 0, limit: int = 10):
 async def get_profile(profile_id: str):
     """Get a single profile by ID."""
     collection = await get_collection()
-    profile = await collection.find_one({"_id": ObjectId(profile_id)})
+    # Since _id is stored as string in the database, query directly by string
+    profile = await collection.find_one({"_id": profile_id})
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
-    return Profile(**profile)
+    return _sanitize_profile_document(profile)
 
 @router.get("/profiles/search", response_model=List[Profile])
 async def search_profiles(
@@ -195,17 +196,17 @@ async def update_profile(profile_id: str, update: ProfileUpdate):
     update_data = {k: v for k, v in update.dict().items() if v is not None}
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
-    result = await collection.update_one({"_id": ObjectId(profile_id)}, {"$set": update_data})
+    result = await collection.update_one({"_id": profile_id}, {"$set": update_data})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Profile not found")
-    updated_profile = await collection.find_one({"_id": ObjectId(profile_id)})
-    return Profile(**updated_profile)
+    updated_profile = await collection.find_one({"_id": profile_id})
+    return _sanitize_profile_document(updated_profile)
 
 @router.delete("/profiles/by-id/{profile_id}")
 async def delete_profile(profile_id: str):
     """Delete a profile."""
     collection = await get_collection()
-    result = await collection.delete_one({"_id": ObjectId(profile_id)})
+    result = await collection.delete_one({"_id": profile_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Profile not found")
     return {"message": "Profile deleted"}
