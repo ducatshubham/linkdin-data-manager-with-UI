@@ -40,6 +40,12 @@ async def import_csv_file(file_path: str, category: str = None) -> Dict[str, int
     for profile_data in unique_profiles:
         if category:
             profile_data['category'] = category
+        # Detect current company if not present or empty
+        if not profile_data.get('current_company'):
+            from utils import detect_current_company
+            detected_company = detect_current_company(profile_data)
+            if detected_company:
+                profile_data['current_company'] = detected_company
         profile_url = profile_data['profile_url']
         existing = await collection.find_one({"profile_url": profile_url})
         if existing:

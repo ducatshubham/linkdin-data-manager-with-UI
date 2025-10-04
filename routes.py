@@ -307,3 +307,19 @@ async def backfill_education():
             await collection.update_one({"_id": doc["_id"]}, {"$set": {"education": edu_list}})
             updated += 1
     return {"updated": updated}
+
+@router.post("/profiles/detect-company/{profile_id}")
+async def detect_company_for_profile(profile_id: str):
+    """Detect current company for a specific profile using AI."""
+    from utils import detect_current_company
+    collection = await get_collection()
+    profile = await collection.find_one({"_id": profile_id})
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    if profile.get("current_company"):
+        return {"message": "Current company already set", "current_company": profile["current_company"]}
+    detected = detect_current_company(profile)
+    if detected:
+        await collection.update_one({"_id": profile_id}, {"$set": {"current_company": detected}})
+        return {"message": "Company detected and updated", "current_company": detected}
+    return {"message": "Could not detect company"}
